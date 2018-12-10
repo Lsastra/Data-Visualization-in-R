@@ -1,0 +1,289 @@
+---
+title: "Youtube Trend Data Visual"
+author: "Winata Syahputra, Win_Bambooo"
+date: "12 Desember 2018"
+output:
+  html_document:
+    code_folding: hide
+    fig_height: 6
+    fig_widht: 9
+    highlight: tango
+    theme: cosmo
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+options(scipen = 9999)
+```
+
+![](https://www.seoclerk.com/pics/443105-1Cdpmj1460287445.png)
+
+*Youtube
+
+
+#Introduction
+This dataset is a daily record of the trending Youtube videoes
+We will try to visualizing videoes from 2018 for business purpose.
+
+
+#Step 1 Data Preparation {.tabset .tabset-fade .tabset-pills}
+We will load the libraries, data and then cleaning
+
+
+## Importing the libraries (We grouping it by the function)
+```{r}
+#Visualization
+library(ggplot2)
+library(lubridate)
+library(corrplot)
+
+#Data manipulation
+library(dplyr)
+library(data.table)
+library(DT)
+library(ggdendro)
+library(ggrepel)
+
+#text manipulation
+library(wordcloud)
+library(wordcloud2)
+library(tm)
+library(RSentiment)
+library(tidytext)
+library(stringr)
+```
+> First thing we are going to importing essential libraries
+
+## Importing dataset
+```{r}
+us <- read.csv("data_input/USvideos.csv")
+```
+> Now let's read our data
+
+## Remove unused data
+```{r}
+us <- us[,-1]
+```
+> When we see our data, we will notice that we dont need the first column, let's remove it
+
+## Converting data format
+```{r}
+us$trending_date <- ydm(us$trending_date)
+us$publish_time <- ymd_hms(us$publish_time)
+us$year <- year(us$publish_time)
+us$hour <- hour(us$publish_time)
+us$publish_date <- ymd(substr(us$publish_time, start = 1, stop = 10))
+us$dif_date <- as.factor(us$trending_date-us$publish_date)
+```
+> When we do the analysis, we need to make sure our data format is correct, so this time we will converting the data format to the correct one
+
+## Subset the data and add the category
+
+Here we only take the videoes that publish in 2018
+```{r}
+my_year = 2018
+us <- us[us$year == my_year,]
+```
+
+we also add the category definition, so we can have more understand about our data
+```{r}
+us = us %>% mutate(category = case_when(
+  category_id== '1' ~ 'Film and Animation',
+  category_id== '2' ~ 'Autos and Vehicles',
+  category_id== '10'~ 'Music',
+  category_id== '15'~ 'Pets and Animals',
+  category_id== '17'~ 'Sports',
+  category_id== '18'~ 'Short Movies',
+  category_id== '19'~ 'Travel and Events',
+  category_id== '20'~'Gaming',
+  category_id== '21'~'Videoblogging',
+  category_id== '22'~ 'People and Blogs',
+  category_id== '23'~ 'Comedy',
+  category_id== '24'~ 'Entertainment',
+  category_id== '25'~ 'News and Politics',
+  category_id== '26'~ 'How to and Style',
+  category_id== '27'~ 'Education',
+  category_id== '28'~ 'Science and Technology',
+  category_id== '29'~ 'Nonprofits & Activism',
+  category_id== '30'~ 'Movies',
+  category_id== '31'~ 'Anime/Animation',
+  category_id== '32'~ 'Action/Adventure',
+  category_id== '33'~ 'Classics',
+  category_id== '34'~ 'Comedy',
+  category_id== '35'~ 'Documentary',
+  category_id== '36'~ 'Drama',
+  category_id== '37'~ 'Family',
+  category_id== '38'~ 'Foreign',
+  category_id== '39'~ 'Horror',
+  category_id== '40'~ 'Sci-Fi/Fantasy',
+  category_id== '41'~ 'Thriller',
+  category_id== '42'~ 'Shorts',
+  category_id== '43'~ 'Shows',
+  category_id== '44'~ 'Trailers'
+))
+```
+
+We also need to change the format of this data
+```{r}
+us[,c("category", "year", "hour")] <- lapply(us[,c("category", "year", "hour")], FUN =as.factor)
+us[,c("views", "likes", "dislikes", "comment_count")] <- lapply(us[,c("views", "likes", "dislikes", "comment_count")], FUN = as.numeric)
+```
+> here we change our data format
+
+## Summariy of the dataset
+```{r eval = F}
+summary(us)
+```
+
+
+#Step 2: Exploratory data analysis 
+## Find the correlation
+Analysis of the plot:
+From the plot we can see that likes have highest correlation to views, almost half of views and dislikes correlation
+
+
+```{r}
+corrplot.mixed(corr = cor(us[,c("views","likes","dislikes","comment_count")]))
+#bagaimana cara membuat ukuran comment_count /fit/
+```
+## Analysing the dataset based on Views, likes, dislikes, and comments
+People commonly think that trending on youtube is base on: views, likes, dislikes, and comments.
+Now let's we see from data that we have.
+We will make an assumption that all of them have high correlation to *Youtube trend videos*
+
+We will use "DT" library, so first we must change our data to data table.
+```{r}
+us <- as.data.table(us)
+```
+
+# Visualization {.tabset .tabset-pills}
+
+## Most views
+
+```{r}
+most_views <- us[,.("Total_views" = round(max(views, na.rm = T), digits = 2)), by = .(title, thumbnail_link)][order(-Total_views)]
+
+most_views %>% 
+  mutate(image = paste0('<img width = "80%" height = "80%" src = "', thumbnail_link, '"></img>')) %>% 
+  arrange(-Total_views) %>% 
+  top_n(10, wt = Total_views) %>% 
+  select(image, title, Total_views) %>% 
+  datatable(class = "nowrap hover row-border", escape = FALSE, options = list(dom = 't', scrollx = TRUE, autowidth = TRUE))
+
+```
+
+## Most likes
+
+```{r}
+most_likes <- us[,.("Total_likes" = round(max(likes, na.rm = TRUE), digits = 2)), by = .(title, thumbnail_link)][order(-Total_likes)]
+most_likes %>% 
+  mutate(image = paste0 ('<img width = "80%" height = "80%"" src = "', thumbnail_link, '"></img>')) %>% 
+  arrange(-Total_likes) %>% 
+  top_n(10, wt = Total_likes) %>% 
+    select(image, title, Total_likes) %>% 
+    datatable(class = "nowrap hover row-border", escape = FALSE, option = list (dom = 't', scrollx = TRUE, autowidth = TRUE))
+```
+
+## Most dislikes
+
+```{r}
+most_dislikes <- us[,.("Total_dislikes" = round(max(dislikes, na.rm = TRUE), digits = 2)), by = .(title, thumbnail_link)][order(-Total_dislikes)]
+most_dislikes %>% 
+  mutate(image = paste0 ('<img width = "80%" height = 80% src = "', thumbnail_link, '"></img>')) %>% 
+  arrange(-Total_dislikes) %>% 
+  top_n(10, wt = Total_dislikes) %>% 
+  select(image, title, Total_dislikes) %>% 
+  datatable(class = "nowrap hover row-border", escape = FALSE, option = list (dom = 't', scrollx = TRUE, autowidth = TRUE))
+
+```
+
+
+## Most comments
+
+```{r}
+sum_comments <- us[match(unique(us$title), us$title)]
+most_comments <- sum_comments[,.("Total_comment" = round(max(comment_count, na.rm = TRUE), digits = 2)), by = .(title, thumbnail_link)][order(-Total_comment)]
+most_comments %>% 
+  mutate(image = paste0 ('<img width = "80%" height = "80%" src = "', thumbnail_link, '"></img>' )) %>% 
+  arrange(-Total_comment) %>% 
+  top_n(10, wt = Total_comment) %>% 
+  select(image, title, Total_comment) %>% 
+  datatable(class = "nowrap hover row-border", escape = FALSE, option = list (dom = 't', scrollx = TRUE, autowidth = TRUE))
+```
+
+
+# Percentages visualization {.tabset .tabset-pills}
+When we see the result of dislikes and likes, we will notice several videoes apprear in different type of category
+Now, let's see the percentages of videoes
+
+## Liked percentage
+
+```{r}
+perc_likes <- us[,.("Percentage_likes" = round(100*max(likes, na.rm = TRUE)/max(views, na.rm = TRUE), digits = 2)), by =.(title,thumbnail_link)][order(-Percentage_likes)]
+perc_likes %>% 
+  mutate(image = paste0 ('<img width = "80%" height = "80%" src = "', thumbnail_link, '"></img>')) %>% 
+  arrange(-Percentage_likes) %>% 
+  top_n(10, wt = Percentage_likes) %>% 
+  select(image, title, Percentage_likes) %>%
+  datatable(class = "nowrap hover row-border", escape = FALSE, option = list(dom = 't', scrollx = TRUE, autowidth = TRUE))
+```
+
+
+## Disliked percentage
+
+```{r}
+perc_dislikes <- us[,.("Percentage_dislikes" = round(100*max (dislikes, na.rm = TRUE)/max(views, na.rm = TRUE), digits = 2)), by=.(title, thumbnail_link)][round(-Percentage_dislikes)]
+
+perc_dislikes %>% 
+  mutate(image = paste0 ('<img width = "80%" height = "80%" src = "', thumbnail_link, '"></img>')) %>% 
+  arrange(-Percentage_dislikes) %>% 
+  top_n(10, wt = Percentage_dislikes) %>% 
+  select(image, title, Percentage_dislikes) %>% 
+  datatable(class = "nowrap hover row-border", escape = FALSE, option = list(dom = 't', scrollx = TRUE, autowidth = TRUE))
+```
+
+## Commented percentage
+
+```{r}
+perc_comments <- us[,.("Percentage_comments" = round(100*max(comment_count, na.rm =TRUE)/max(views, na.rm = TRUE), digits = 2)), by = .(title, thumbnail_link)][round(-Percentage_comments)]
+perc_comments %>% 
+  mutate(image = paste0('<img width = "80%" height = "80%" src = "', thumbnail_link, '"></img>')) %>% 
+  arrange(-Percentage_comments) %>% 
+  top_n(10, wt = Percentage_comments) %>% 
+  select(image, title, Percentage_comments) %>% 
+  datatable(class = "nowrap hover row-border", escape = FALSE, option = list(dom = 't', scrollx = TRUE, autowidth = TRUE))
+```
+
+
+# Visualization using plot {.tabset}
+
+We have seen our data, now let's plot it to there category
+
+## Plot of liked
+
+```{r}
+ggplot(us[,.("Total_likes" = max(likes)), by = category],
+       aes(reorder(category,-Total_likes),Total_likes, fill = category))+
+  geom_bar(stat="identity")+
+  geom_label(aes(label=Total_likes))+
+  guides(fill = "none")+
+  theme(axis.text.x = element_text(angle = 45, hjust =1))+
+  labs(title="Total likes by Category")+
+  xlab(NULL)+ylab(NULL)+coord_flip()
+```
+
+## plot of disliked
+```{r}
+ggplot(us[,.("Total_Dislikes"=max(dislikes)),by=category],
+       aes(reorder(category,-Total_Dislikes),Total_Dislikes,
+           fill=category))+geom_bar(stat="identity")+
+  geom_label(aes(label=Total_Dislikes))+guides(fill="none")+
+  theme(axis.text.x = element_text(angle = 45,hjust = 1))+  
+  labs(title=" Total Dislikes by Category")+
+  xlab(NULL)+ylab(NULL)+coord_flip()
+```
